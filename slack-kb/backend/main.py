@@ -1,20 +1,28 @@
 import os
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain_community.vectorstores import Chroma
 
-os.environ["AQ.Ab8RN6KtUTnP49BoMjkfAmIFRIcb5W0v8bwtvkCg3WbNx5arqw"] = "AQ.Ab8RN6KtUTnP49BoMjkfAmIFRIcb5W0v8bwtvkCg3WbNx5arqw"
+# Optional heavy imports (langchain, embeddings, vectorstore)
+HAS_LANGCHAIN = True
+try:
+    from langchain_community.document_loaders import PyPDFLoader
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+    from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
+    from langchain_community.vectorstores import Chroma
+except Exception:
+    HAS_LANGCHAIN = False
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 vectordb = None
 
+
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
+    if not HAS_LANGCHAIN:
+        return {"error": "Required dependencies not installed on the Codespace. Install langchain-related packages to enable upload."}
+
     global vectordb
     path = f"temp_{file.filename}"
     with open(path, "wb") as f:
@@ -31,8 +39,12 @@ async def upload(file: UploadFile = File(...)):
     os.remove(path)
     return {"status": "success", "chunks": len(chunks)}
 
+
 @app.post("/ask")
 async def ask(question: str):
+    if not HAS_LANGCHAIN:
+        return {"error": "Required dependencies not installed on the Codespace. Install langchain-related packages to enable asking."}
+
     if vectordb is None:
         return {"answer": "Please upload a document first.", "sources": []}
 
@@ -46,6 +58,7 @@ async def ask(question: str):
     sources = [{"page": d.metadata.get("page", "N/A"), "snippet": d.page_content[:150]} for d in docs]
     return {"answer": response.content, "sources": sources}
 
+
 @app.get("/")
 def home():
-    return {"status": "Backend running"}
+    return {"status": "Backend running", "langchain_enabled": HAS_LANGCHAIN}
